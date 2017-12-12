@@ -2,15 +2,35 @@ import { createStore, applyMiddleware, compose } from 'redux'
 import { routerMiddleware } from 'react-router-redux'
 import thunk from 'redux-thunk'
 import createHistory from 'history/createBrowserHistory'
-import rootReducer from './modules'
-// import ReconnectingWebSocket from 'reconnecting-websocket'
+// import rootReducer from './modules'
+import documentReducer from './modules/documents/reducer'
+import ReconnectingWebSocket from 'reconnecting-websocket'
+import {load} from './modules/documents/actions'
+import types from './modules/documents/types'
 
-const custom = store => next => action => {
-    console.log('dispatching', action)
-    let result = next(action)
-    console.log('next state', store.getState())
-    return result
+const socket = new ReconnectingWebSocket('ws://localhost:8000/');
+socket.debug = true;
+socket.timeoutInterval = 5400;
+
+socket.onclose = () => console.log('closed ws connection')
+
+socket.onmessage = ({data}) => {
+  let {type, payload: {documents}} = JSON.parse(data)
+  if( type == types.LOAD) {
+    store.dispatch(load(documents.reduce((prev, next) => {prev[next.id] = next; return prev}, {}))) 
+  }  
+}
+
+const actionsToExclude = [types.LOAD]
+const command = store => next => action => {
+  if( action.type === types.LOAD ) {
+    localStorage.setItem('channelId', action.channelId)
   }
+  if( !actionsToExclude.includes(action.type) && !action.done && socket.readyState) {
+    socket.send(JSON.stringify(action))
+  }
+  return next(action) 
+}
 
 export const history = createHistory()
 
@@ -18,7 +38,7 @@ const initialState = {}
 const enhancers = []
 const middleware = [
   thunk,
-  custom,
+  command,
   routerMiddleware(history)
 ]
 
@@ -30,25 +50,13 @@ if (process.env.NODE_ENV === 'development') {
   }
 }
 
-// const socket = new ReconnectingWebSocket(`ws://${window.location.host}/`, null, {
-//     debug: true,
-//     reconnectInterval: 3000
-// });
-
-//socket.onclose = () => alert('closed ws connection')
-
-// socket.onmessage = ({data}) => {
-//     console.log(JSON.parse(data))
-//     // based on data type, load store
-// }
-
 const composedEnhancers = compose(
   applyMiddleware(...middleware),
   ...enhancers
 )
 
 const store = createStore(
-  rootReducer,
+  documentReducer,
   initialState,
   composedEnhancers
 )
