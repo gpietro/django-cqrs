@@ -15,7 +15,10 @@ def ws_connect(message):
     message.reply_channel.send({
         "text": json.dumps({
             "type": "LOAD",
-            "payload": DocumentSerializer(Document.objects.all(), many=True).data,
+            "channelId": message.reply_channel.name,
+            "payload": {
+                "documents": DocumentSerializer(Document.objects.all(), many=True).data,
+            }
         })
     })
     Group("main").add(message.reply_channel)
@@ -24,7 +27,7 @@ def ws_connect(message):
 @channel_session
 def ws_receive(message):
     try:
-        data = json.loads(message['text'])
+        data = json.loads(message.content['text'])
         log.debug(message.reply_channel.name)
     except ValueError:
         log.debug("ws message isn't json text=%s", message['text'])
